@@ -1,0 +1,13 @@
+{
+  "api": {
+    "url": "https://your-provider.example/v1/chat/completions",
+    "key": "replace-with-your-api-key"
+  },
+  "whisper_cli": "tools/whisper-cli.exe",
+  "ffmpeg": "tools/ffmpeg.exe",
+  "vad_model": "models/ggml-silero-v6.2.0.bin",
+  "models": {
+    "turbo": "models/ggml-large-v3-turbo-q5_0.bin",
+    "medium": "models/ggml-medium.bin"
+  }
+}

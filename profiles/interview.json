@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "name": "interview",
+  "description": "Interviews and group conversations with short turns and colloquial speech.",
+  "language": "auto",
+  "whisper_model": "turbo",
+  "refine_model": "qwen3.8-chat",
+  "refine_batch_minutes": 2,
+  "whisper_threads": 8,
+  "whisper_instruction": "This is an interview or group conversation. Preserve names, natural wording, short responses, and Chinese-English code-switching.",
+  "refine_instruction": "Treat the recording as an interview. Preserve turn-taking, questions, short answers, hesitation that carries meaning, and the speaker's level of certainty. Do not invent speaker names or merge distinct turns.",
+  "lecture_notes": false,
+  "no_sdh": false
+}

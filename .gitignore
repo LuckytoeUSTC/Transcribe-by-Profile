@@ -1,0 +1,31 @@
+# Secrets and machine-specific configuration
+transcribe.config.json
+.env
+*.local.json
+
+# Downloaded binaries and models
+models/*.bin
+tools/*.exe
+
+# Private source media and generated output
+*.mp3
+*.mp4
+*.wav
+*.flac
+*.ogg
+*.m4a
+transcripts/
+*.raw.json
+*.raw.srt
+*.raw.txt
+*.vad.json
+*.config.json
+*.lecture.md
+*.lecture.review.md
+*.segmented.md
+*.segmented.srt
+
+# Personal terminology and temporary files
+glossary.txt
+*.lock
+*.tmp.*

@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "name": "course",
+  "description": "Academic lectures with terminology, formulas, and long explanations.",
+  "language": "auto",
+  "whisper_model": "turbo",
+  "refine_model": "qwen3.8-chat",
+  "refine_batch_minutes": 3,
+  "whisper_threads": 8,
+  "whisper_instruction": "This is an academic lecture. Preserve technical terms, names, formulas, variables, and Chinese-English code-switching.",
+  "refine_instruction": "Treat the recording as an academic lecture. Correct technical terminology conservatively, preserve formulas and logical qualifications, and form semantic paragraphs around one coherent explanation.",
+  "lecture_notes": true,
+  "lecture_instruction": "Create a faithful lecture reading text, not a summary. Preserve derivations, assumptions, examples, qualifications, open questions, and unresolved uncertainty. Prefer the supplied course reference for exact names, formulas, numerical values, units, figure labels, and attribution. Never reconstruct an equation or scientific mechanism from unclear speech alone. Use descriptive section headings, sparse bold emphasis for key concepts, and lists only when the lecturer actually presents parallel items or steps.",
+  "no_sdh": false
+}
