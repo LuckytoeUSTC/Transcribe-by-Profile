@@ -112,4 +112,6 @@ Whisper transcription runs locally. The refinement, glossary, and lecture stages
 - [Codex-assisted setup](SETUP_WITH_CODEX.md)
 - [Profile template](profiles/PROFILE_TEMPLATE.md)
 
-This repository intentionally does not include a license.
+## License
+
+Released under the [MIT License](LICENSE).
