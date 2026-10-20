@@ -1,117 +1,42 @@
 # Transcribe by Profile
 
-Local Whisper transcription with profile-aware LLM refinement for lectures, interviews, and podcasts.
+Local Whisper transcription with profile-based LLM correction, semantic subtitles, and lecture notes. Built for Windows and PowerShell.
 
-## About
+## What it does
 
-Transcribe by Profile is a Windows PowerShell pipeline that keeps speech recognition local while using an OpenAI-compatible API to clean and organize the result. It combines whisper.cpp, Silero VAD, word-level timing, terminology-aware correction, semantic paragraph reconstruction, and optional lecture-note generation.
+- Runs whisper.cpp and Silero VAD locally, with timing mapped back to the source media.
+- Applies one audio policy to every profile and format: preserve mono, take only the left channel from stereo, and downmix inputs with more than two channels.
+- Uses your glossary, topic, and references to correct terminology and organize the transcript.
+- Produces conventional SRT subtitles and matching semantic-paragraph SRT/Markdown.
+- Offers course, interview, and podcast profiles; course recordings can also become referenced lecture notes.
+- Reports live progress and batch times, limits repeated model failures, and retains recovery data when needed.
 
-The included profiles adapt the same pipeline to different material:
+## Get started
 
-- **Course** preserves technical terminology, formulas, qualifications, and long explanations; it can also produce a referenced lecture reading text.
-- **Interview** preserves questions, short answers, hesitation, and conversational turn boundaries.
-- **Podcast** favors coherent continuous reading and semantic paragraphs suitable for rolling transcripts.
-
-Normal output consists of conventional sentence subtitles (`.srt`), semantic rolling subtitles (`.segmented.srt`), and a readable transcript (`.segmented.md`). Raw Whisper data, VAD mappings, and recovery configuration can be retained when needed.
-
-## Highlights
-
-- Local ASR with whisper.cpp; recordings are not sent to the refinement API.
-- Silero VAD removes non-speech regions without adding `[silence]` labels.
-- Word timing is remapped to the original media after VAD compaction.
-- Recording-specific glossary ranking combines transcript evidence, topic relevance, ASR risk, and conceptual importance.
-- Concurrent LLM batches include retries and resumable recovery files.
-- Course references may be PDF, TXT, MD, or a directory containing those formats.
-- No subject-specific glossary is built in; your own `glossary.txt` remains editable.
-
-## Requirements
-
-- Windows 10 or 11
-- Windows PowerShell 5.1 or PowerShell 7
-- `whisper-cli.exe` and FFmpeg, either supplied by [Buzz](https://github.com/chidiwilliams/buzz) or installed separately
-- A whisper.cpp GGML/GGUF Whisper model
-- `ggml-silero-v6.2.0.bin` for VAD
-- An OpenAI-compatible chat-completions API for refinement
-
-## Installation
-
-1. Clone or download this repository.
-2. Put the repository directory on your user `PATH` so the `.cmd` commands work from any terminal.
-3. Copy `transcribe.config.example.json` to `transcribe.config.json`.
-4. Configure the API, executable paths, and model paths as described below.
-5. Open a new PowerShell window and run `transcribe -?`.
-
-The local `transcribe.config.json` file is ignored by Git and may safely contain machine-specific paths. Environment variables are preferable on shared computers or when the repository directory is synchronized.
-
-## Configuration
-
-### Option A: local configuration file
+Install the dependencies and configure an OpenAI-compatible API using the [Windows setup guide](SETUP.md). Executables and model files are not bundled. For assisted setup, see [SETUP_WITH_CODEX.md](SETUP_WITH_CODEX.md).
 
 ```powershell
-Copy-Item .\transcribe.config.example.json .\transcribe.config.json
-notepad .\transcribe.config.json
-```
-
-Paths may be absolute or relative to the configuration file. A typical layout is:
-
-```text
-Transcribe-by-Profile/
-  models/
-    ggml-silero-v6.2.0.bin
-    ggml-large-v3-turbo-q5_0.bin
-  tools/
-    whisper-cli.exe
-    ffmpeg.exe
-  transcribe.config.json
-```
-
-Buzz installations are detected automatically, so `whisper_cli` and `ffmpeg` may be left blank when Buzz supplies both executables.
-
-### Option B: environment variables
-
-```powershell
-[Environment]::SetEnvironmentVariable('TRANSCRIBE_API_URL', 'https://provider.example/v1/chat/completions', 'User')
-[Environment]::SetEnvironmentVariable('TRANSCRIBE_API_KEY', 'your-api-key', 'User')
-[Environment]::SetEnvironmentVariable('TRANSCRIBE_MODEL_TURBO', 'D:\Models\ggml-large-v3-turbo-q5_0.bin', 'User')
-[Environment]::SetEnvironmentVariable('TRANSCRIBE_VAD_MODEL', 'D:\Models\ggml-silero-v6.2.0.bin', 'User')
-```
-
-Additional variables are `TRANSCRIBE_MODEL_MEDIUM`, `TRANSCRIBE_WHISPER_CLI`, `TRANSCRIBE_FFMPEG`, and `TRANSCRIBE_CONFIG`. Subtitle Edit's OpenAI-compatible API settings remain a fallback when neither environment variables nor the local configuration supplies API credentials.
-
-Configuration precedence is: explicit command option, environment variable, local configuration, project-local file, and supported application fallback.
-
-## Quick start
-
-```powershell
-# General transcription
 transcribe "D:\recordings\audio.mp3"
-
-# Academic lecture with reference material
-transcribe "D:\course\lecture.mp4" -Profile course -Topic "computational neuroscience" -Reference "D:\course\references"
-
-# Player-ready subtitle beside the media
+transcribe "D:\course\lecture.mp4" -Profile course -Topic "recurrent neural networks"
 transcribe "D:\recordings\audio.mp3" -Brief
-
-# Resume refinement after an interrupted run
-transcribe_refine "D:\course\transcripts\lecture_auto.raw.json"
 ```
 
-See [TRANSCRIBE_HELP.md](TRANSCRIBE_HELP.md) for all commands, outputs, profiles, glossary behavior, and recovery workflows.
+## Output and recovery
 
-## Configure it with Codex
+Normal output is `.srt`, `.segmented.srt`, and `.segmented.md`; the course profile also creates `.lecture.md`. Auxiliary files are grouped in `transcripts/.work/<recording>/`. Use `-FullOutput` to keep them after a successful run.
 
-See [SETUP_WITH_CODEX.md](SETUP_WITH_CODEX.md) for a safe, copyable Codex workflow that detects installed tools, prepares local configuration, checks models, and runs a smoke test without committing credentials.
+```powershell
+transcribe_refine "D:\course\transcripts\lecture_auto" -FullOutput
+```
 
-## Privacy and security
+See the [command guide](TRANSCRIBE_HELP.md) for glossaries, references, profiles, recovery, and other options.
 
-Whisper transcription runs locally. The refinement, glossary, and lecture stages send transcript text—and references when explicitly supplied—to the configured API. Review your provider's data policy before using private recordings or documents. Never commit `transcribe.config.json`, API keys, recordings, transcripts, glossaries, or course references.
+## Privacy and limitations
 
-## Documentation
+Audio recognition stays local. LLM stages send transcript text and selected references, including automatically detected course references, to your configured provider. Keep credentials, private media, transcripts, and reference material out of Git.
 
-- [Command reference](TRANSCRIBE_HELP.md)
-- [Codex-assisted setup](SETUP_WITH_CODEX.md)
-- [Profile template](profiles/PROFILE_TEMPLATE.md)
+Correction and timing are approximate. Unclear speech, repeated ASR hallucinations, and model failures can leave errors; inspect warnings and any lecture review notes before relying on the result.
 
 ## License
 
-Released under the [MIT License](LICENSE).
+[MIT](LICENSE). Third-party tools and model files retain their own licenses.

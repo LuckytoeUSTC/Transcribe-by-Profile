@@ -5,6 +5,7 @@
   },
   "whisper_cli": "tools/whisper-cli.exe",
   "ffmpeg": "tools/ffmpeg.exe",
+  "ffprobe": "tools/ffprobe.exe",
   "vad_model": "models/ggml-silero-v6.2.0.bin",
   "models": {
     "turbo": "models/ggml-large-v3-turbo-q5_0.bin",

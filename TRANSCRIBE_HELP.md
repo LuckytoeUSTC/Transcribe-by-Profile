@@ -1,213 +1,118 @@
 # Transcribe
 
-Transcribe audio or video locally with Whisper, then correct and organize the transcript with an OpenAI-compatible LLM API. Profile-aware processing supports academic lectures, interviews, and podcasts; output includes conventional subtitles, semantic rolling subtitles, readable transcripts, and optional referenced lecture notes.
+Local Whisper transcription with LLM correction, semantic paragraphs, and optional lecture notes. Profiles adapt the output to courses, interviews, and podcasts.
 
-Whisper and VAD run locally. Refinement sends transcript text to the configured API, while reference files are sent only when explicitly selected for glossary or lecture processing.
+Whisper and VAD run locally. Configure the API using environment variables or a local config file; Subtitle Edit settings are also supported. See [setup](SETUP.md). LLM stages send transcript text and selected references to that service.
 
-## Installation and portable configuration
-
-Add the repository directory to your user `PATH`, copy `transcribe.config.example.json` to the ignored `transcribe.config.json`, and configure the API and model paths. Paths in that file may be absolute or relative to the repository. Alternatively, use environment variables so one checkout can move between machines without editing tracked files.
-
-Required API settings are `TRANSCRIBE_API_URL` and `TRANSCRIBE_API_KEY`. Model/tool variables are `TRANSCRIBE_MODEL_TURBO`, `TRANSCRIBE_MODEL_MEDIUM`, `TRANSCRIBE_VAD_MODEL`, `TRANSCRIBE_WHISPER_CLI`, and `TRANSCRIBE_FFMPEG`. Buzz executables and Subtitle Edit API settings are detected as fallbacks. Full manual setup is in `README.md`; a safe Codex-assisted workflow is in `SETUP_WITH_CODEX.md`.
+All profiles preprocess every input format, including WAV, MP3, and video, into the same 16 kHz mono WAV for both VAD and Whisper. Mono keeps its channel content; stereo uses only the left channel; inputs with more than two channels are downmixed. The original media timeline and leading audio offsets are preserved. There is no automatic right-channel review. FFmpeg and FFprobe are required.
 
 ## Quick start
 
 ```powershell
-# Standard transcription
 transcribe "D:\recordings\audio.mp3"
-
-# Academic course
-transcribe "D:\course\f0.mp4" -Profile course -Topic "computational neuroscience"
-
-# Add a few temporary terms
-transcribe "D:\course\f0.mp4" -Terms "Brian2; Purkinje cell"
-
-# Renew glossary.txt after Whisper using the rough transcript and references
-transcribe "D:\course\f0.mp4" -Profile course -Reference "D:\course\references" -GlossaryRenew
-
-# One subtitle file beside the media, ready for a player
+transcribe "D:\course\lecture.mp4" -Profile course -Topic "recurrent neural networks"
+transcribe "D:\course\lecture.mp4" -Terms "Purkinje cell; Brian2"
+transcribe "D:\course\lecture.mp4" -Profile course -Reference "D:\course\slides.pdf" -GlossaryRenew
 transcribe "D:\recordings\audio.mp3" -Brief
-
-# Resume only the LLM refinement stage
-transcribe_refine "D:\course\transcripts\f0_auto.raw.json"
-
-# Generate or update glossary.txt without transcribing
-transcribe_glossary "D:\course\references" -Topic "computational neuroscience"
-
-# Show command help
 transcribe -?
 ```
 
-The first positional argument is always the input media file. `-Profile` selects defaults for the recording type, and `-Topic` gives the LLM a short subject hint.
-
-By default, the spoken language is detected automatically, `glossary.txt` beside the media is loaded when present, and output goes to a `transcripts` folder beside the media. The `course` profile automatically uses a single PDF beside the media as its reference. `transcribe_refine` automatically restores the matching `.vad.json` timing map and `.config.json` settings when they are available.
+Language defaults to `auto`. The command loads `glossary.txt` beside the media when present and writes to a `transcripts` folder there. The `course` profile also selects a reference when exactly one PDF is beside the media.
 
 ## Common options
 
-| Option | Use |
+| Option | Purpose |
 |---|---|
-| `-Profile course` | Academic lectures; also creates a lecture reading text |
-| `-Profile interview` | Interviews and group conversations |
-| `-Profile podcast` | Podcasts and continuous spoken programs |
-| `-Topic "..."` | Improve terminology ranking and global structure |
-| `-Language en` | Specify the spoken language instead of automatic detection |
-| `-Brief` | Keep only one conventional SRT beside the media |
-| `-SkipRefine` | Run Whisper only and retain recovery files |
-| `-RefineModel qwen3.8-chat` | Select the LLM used after Whisper |
-| `-GlossaryFile "..."` | Use a particular terminology file |
-| `-Terms "A; B"` | Add a few temporary terms |
-| `-Reference "..."` | Supply course references for verification and lecture generation |
-| `-GlossaryRenew` | Update `glossary.txt` after Whisper using recording evidence and references |
-| `-FullOutput` | Keep raw, timing, configuration, and diagnostic files |
+| `-Profile course` | Academic lectures and a lecture reading text |
+| `-Profile interview` | Questions, short answers, and conversational turns |
+| `-Profile podcast` | Continuous speech and readable paragraphs |
+| `-Topic "..."` | Context for terminology and organization |
+| `-Language en` | Set the spoken language explicitly |
+| `-Terms "A; B"` / `-Glossary "A; B"` | Temporary terms shared by Whisper and refinement |
+| `-GlossaryFile "..."` | Select a terminology file |
+| `-Reference "..."` | A PDF, TXT, MD, or folder containing those formats |
+| `-GlossaryRenew` | Merge recording-specific terms into `glossary.txt` |
+| `-RefineModel qwen3.8-chat` | Select the API model; this is the default |
+| `-Brief` | Only one SRT beside the media, with the same base name |
+| `-SkipRefine` | Stop after Whisper and keep recovery files |
+| `-FullOutput` | Keep working files after success |
 
-## Profiles
+`-Brief` cannot be combined with `-FullOutput`, `-SkipRefine`, or `-OutputDirectory`. Custom profiles use `-Profile "path\profile.json"`; see [the profile template](profiles/PROFILE_TEMPLATE.md).
 
-Profiles supply tested defaults. An explicit command-line option overrides the corresponding profile value.
+Languages: `auto`, `en` (English), `zh` (Chinese), `ja` (Japanese), `ko` (Korean), `fr` (French), `de` (German), `es` (Spanish), `ru` (Russian), `pt` (Portuguese).
 
-| Profile | Intended use | Additional behavior |
-|---|---|---|
-| `course` | Academic lectures | Preserves terminology and reasoning; creates `.lecture.md` |
-| `interview` | Interviews and group conversations | Preserves questions, short answers, hesitation, and turn boundaries |
-| `podcast` | Podcasts and spoken programs | Produces paragraphs suited to continuous reading |
-
-```powershell
-transcribe "D:\course\f0.mp4" -Profile course
-transcribe "D:\course\f0.mp4" -Profile course -RefineModel deepseek-flash-2
-transcribe "D:\course\f0.mp4" -Profile "D:\course\my-profile.json"
-```
-
-The profile template and field reference are in `profiles\PROFILE_TEMPLATE.md` beside the scripts.
+Whisper models: `turbo` (default), `medium`. API models include `qwen3.8-chat` (default) and `deepseek-flash-2`; availability depends on your provider.
 
 ## Glossaries and references
 
-If `glossary.txt` exists beside the input media, it is loaded automatically. Use `-GlossaryFile` to select a different file. Glossaries are UTF-8 text with one preferred spelling per line; blank lines and lines beginning with `#` are ignored. No subject-specific glossary is built in.
+A glossary is a UTF-8 text file with one preferred term per line. Blank lines and `#` comments are ignored:
 
 ```text
-# Names
+# Names and technical terms
 Eve Marder
-David Marr
-
-# Technical terms
-integrate-and-fire model
 Purkinje cell
-Brian2
+integrate-and-fire model
 ```
 
-The same glossary helps both Whisper and LLM refinement. For a short temporary list:
+Whisper uses the existing list. Before refinement, the LLM uses the rough transcript, topic, and references to select and rank terms. This working list leaves your manual glossary unchanged unless you add `-GlossaryRenew`. Existing terms and header comments are retained; internal comments may be replaced with priority headings.
+
+Reference folders include only directly contained PDF/TXT/MD files. Extracted text is cached in the system temporary directory.
+
+Generate a glossary separately:
 
 ```powershell
-transcribe "D:\course\f0.mp4" -Terms "Brian2; Purkinje cell"
-```
-
-`-Terms` and `-Glossary` are synonyms.
-
-A reference can be one PDF, TXT, or MD file, or a directory. For a directory, only PDF/TXT/MD files directly inside it are read. Extracted text is cached locally.
-
-Whisper first uses the existing manual glossary. Before refinement, terms are automatically reordered for this recording from the rough transcript, with references used to recover canonical spellings. This recording-specific list is stored in the recovery configuration, while the manual file remains unchanged. Add `-GlossaryRenew` to merge the recording-grounded result back into `glossary.txt`:
-
-```powershell
-transcribe "D:\course\f0.mp4" `
-  -Profile course `
-  -Topic "single-neuron computation" `
-  -Reference "D:\course\references" `
-  -GlossaryRenew
-```
-
-Generate or update a glossary without transcribing:
-
-```powershell
-transcribe_glossary "D:\course\slides.pdf"
-transcribe_glossary "D:\course\references" -Topic "single-neuron computation"
-transcribe_glossary "D:\course\slides.pdf" -GlossaryFile "D:\course\terms.txt"
+transcribe_glossary "D:\course\references" -Topic "recurrent neural networks"
 transcribe_glossary "D:\course\slides.pdf" -NoMerge
 ```
 
-By default, existing terms are retained and new terms are added. During transcription, the rough transcript is the primary evidence: ranking weights are 35% recording evidence, 25% topic relevance, 20% ASR error risk, and 20% expected frequency or conceptual importance. Terms are written in canonical form; uncertain names, transcript fragments, numerical facts, and terms found only in unrelated reference sections are excluded. Initial manual header comments are preserved. Old comments inside the term list are replaced with sparse `High priority`, `Medium priority`, and `Additional terms` headings, translated when most terms in that tier are Chinese. `-NoMerge` writes `glossary.extracted.txt` instead.
+The default output is `glossary.txt` beside the reference. `-GlossaryFile` selects another destination; `-NoMerge` writes `glossary.extracted.txt` instead.
 
-## Refining an existing Whisper result
+## Resume or regenerate
 
-`transcribe` saves recovery files before calling the LLM. If refinement is interrupted, run `transcribe_refine` on the raw JSON:
+Recovery settings are saved before API processing. Resume without running Whisper again:
 
 ```powershell
-transcribe_refine "D:\course\transcripts\f0_auto.raw.json"
-transcribe_refine "D:\course\transcripts\f0_auto.raw.json" -Profile course
-transcribe_refine "D:\course\transcripts\f0_auto.raw.json" -RefineModel deepseek-flash-2
+transcribe_refine "D:\course\transcripts\lecture_auto" -FullOutput
+transcribe_refine "D:\course\transcripts\.work\lecture_auto\raw.json" -RefineModel deepseek-flash-2
 ```
 
-Standalone refinement automatically reads the matching `.vad.json` and `.config.json`. Its setting priority is: explicit command-line options, profile values, saved configuration, then built-in defaults.
+Both forms load the matching VAD map and saved settings. Priority is command line, profile, saved settings, then defaults. Standalone refinement reuses supplied terminology; it does not rerun glossary generation.
 
-The refinement workflow is:
+Regenerate only lecture notes:
 
-1. Correct overlapping batches and reconstruct complete sentences.
-2. Read the complete ordered sentence list to create a global outline and semantic paragraph boundaries.
-3. For an overlong semantic paragraph, offer complete-sentence candidates near balanced text positions to the LLM and validate its context-aware split choices.
-4. Create conventional subtitles, semantic rolling subtitles, and a readable transcript.
-5. For the `course` profile, reuse the global outline to create lecture notes.
+```powershell
+transcribe_lecture -SegmentedPath "D:\course\transcripts\lecture_auto.segmented.md" -Reference "D:\course\slides.pdf"
+```
 
 ## Output
 
-The normal workflow keeps three files:
-
-```text
-f0_auto.srt             Conventional subtitles for display over video
-f0_auto.segmented.srt   Semantic paragraphs for rolling transcript views
-f0_auto.segmented.md    The same semantic paragraphs as readable Markdown
-```
-
-The `course` profile additionally creates:
-
-```text
-f0_auto.lecture.md          Lecture reading text
-f0_auto.lecture.review.md   Corrections or unresolved factual uncertainty, when present
-```
-
-`.segmented.srt` and `.segmented.md` use identical paragraphs. If a semantic paragraph exceeds about 1,400 characters, the script finds balanced candidate sentence endings and asks the LLM to choose the most natural transitions from the full paragraph context. Invalid choices are retried; the nearest balanced endings are used only if all retries fail. Lecture timestamps use whole seconds.
-
-`-Brief` keeps only `D:\course\f0.srt` beside `D:\course\f0.mp4`. It cannot be combined with `-FullOutput`, `-SkipRefine`, or `-OutputDirectory`.
-
-`-SkipRefine` keeps `.raw.txt`, `.raw.srt`, `.raw.json`, `.vad.json`, and `.config.json`, but does not create refined or segmented output.
-
-`-FullOutput` additionally keeps `.raw.txt`, `.raw.srt`, `.raw.json`, `.vad.json`, `.config.json`, and `.refined.json` after successful refinement.
-
-## Languages and models
-
-Common language codes:
-
-| Code | Language | Code | Language |
-|---|---|---|---|
-| `auto` | Automatic detection | `ko` | Korean |
-| `zh` | Chinese | `fr` | French |
-| `en` | English | `de` | German |
-| `ja` | Japanese | `es` | Spanish |
-| `ru` | Russian | `pt` | Portuguese |
-
-Refinement models:
-
-| Model | Notes |
+| File | Use |
 |---|---|
-| `qwen3.8-chat` | Default; faster in the tested course transcript |
-| `deepseek-flash-2` | Slower and more conservative |
+| `lecture_auto.srt` | Conventional subtitles |
+| `lecture_auto.segmented.srt` | Semantic paragraphs for rolling subtitles |
+| `lecture_auto.segmented.md` | The same paragraphs for reading |
+| `lecture_auto.lecture.md` | Course reading text, when requested |
 
-Whisper models:
+Long paragraphs are split at complete-sentence transitions using text length and context. Lecture timestamps use whole seconds.
 
-| Model | Notes |
+Working files live in `.work/lecture_auto/`: `raw.json`, `raw.srt`, `vad.json`, `config.json`, and any generated glossary, refinement data, or diagnostics. No `raw.txt` is generated. A lecture review appears there only when corrections or unresolved questions need attention.
+
+`-FullOutput` retains working files. Failed or warning-producing runs retain recovery data automatically; a clean successful run removes it. Review notes remain when present. Existing flat raw JSON files can also be passed explicitly and are moved with their recovery sidecars into `.work`.
+
+Progress appears above batch completion lines. Batches are reported as they finish, with their original numbers and elapsed time; output text stays in source order. Warnings identify unchanged fallback text, and failed responses are saved under `api-diagnostics`. Validation checks structure and coverage, not factual accuracy.
+
+## Additional options
+
+| Option | Purpose / default |
 |---|---|
-| `turbo` | Default; faster |
-| `medium` | Alternative local model |
-
-## Less common options
-
-These options are mainly for customization or troubleshooting:
-
-| Option | Description | Default |
-|---|---|---|
-| `-WhisperPrompt` | Read Whisper instructions from a file | None |
-| `-RefinePrompt` | Read additional refinement instructions from a file | None |
-| `-LecturePrompt` | Read lecture-generation instructions from a file | None |
-| `-LectureNotes` | Request lecture reading text without relying on a profile | Off |
-| `-RefineBatchMinutes` | Approximate source duration per correction batch | `3` |
-| `-WhisperThreads` | Whisper processing threads | `8` |
-| `-WhisperCpu` | Disable GPU acceleration | Off |
-| `-VerboseVad` | Show every VAD segment and mapping line | Off |
-| `-NoSDH` | Remove sound-event labels from final refined output | Off |
-| `-OutputDirectory` | Override the output directory | `transcripts` beside the media |
+| `-WhisperModel medium` | Choose the local model; default `turbo` |
+| `-WhisperModelPath "..."` | Use a model outside the default model folder |
+| `-WhisperPrompt`, `-RefinePrompt`, `-LecturePrompt` | Read stage instructions from a file |
+| `-LectureNotes` | Request lecture notes without a course profile |
+| `-NoSDH` | Remove sound-event labels; VAD stays enabled |
+| `-RefineBatchMinutes` | Approximate correction batch duration; default `3` |
+| `-WhisperThreads` | Local processing threads; default `8` |
+| `-WhisperCpu` | Disable GPU acceleration |
+| `-OutputDirectory` | Choose the output folder |
+| `-Verbose` | Show technical details |
+| `-VerboseVad` | Show individual VAD regions and mappings |

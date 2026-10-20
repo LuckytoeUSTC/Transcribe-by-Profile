@@ -13,7 +13,7 @@ param(
 )
 $ErrorActionPreference='Stop'
 Import-Module (Join-Path $PSScriptRoot 'transcribe_reference.psm1') -Force
-Import-Module (Join-Path $PSScriptRoot 'transcribe_config.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'transcribe_runtime.psm1') -Force
 if(-not $Reference -and -not $TranscriptFile){throw 'Provide -Reference, -TranscriptFile, or both.'}
 if(-not $GlossaryFile){if(-not $Reference){throw '-GlossaryFile is required when no reference is supplied.'};$GlossaryFile=Get-TranscriptionReferenceGlossaryPath -Reference $Reference}
 $GlossaryFile=[IO.Path]::GetFullPath($GlossaryFile)
@@ -52,9 +52,19 @@ try{
     }
     if($SeedTerms){$existingTerms += @($SeedTerms -split ';'|ForEach-Object{$_.Trim()}|Where-Object{$_})}
     $existingTerms=@($existingTerms|Select-Object -Unique)
-    $api=Get-TranscribeApiConfiguration;$url=$api.Url;$key=$api.Key
+    $api=Get-TranscriptApi;$url=$api.Url;$key=$api.Key
     $referenceText=if($ExtractedTextPath){Get-Content -Raw -LiteralPath $ExtractedTextPath}else{''};if($referenceText.Length -gt 240000){$referenceText=$referenceText.Substring(0,240000)}
-    $transcriptText=if($TranscriptFile){Get-Content -Raw -LiteralPath (Resolve-Path -LiteralPath $TranscriptFile -ErrorAction Stop)}else{''};if($transcriptText.Length -gt 180000){$transcriptText=$transcriptText.Substring(0,180000)}
+    $transcriptText=''
+    if($TranscriptFile){
+        $transcriptText=Get-Content -Raw -LiteralPath (Resolve-Path -LiteralPath $TranscriptFile -ErrorAction Stop)
+        if([IO.Path]::GetExtension($TranscriptFile) -ieq '.json'){
+            $transcriptData=$transcriptText|ConvertFrom-Json
+            if(-not $transcriptData.PSObject.Properties['transcription']){throw 'Expected a Whisper JSON file containing transcription.'}
+            Import-Module (Join-Path $PSScriptRoot 'transcribe_quality.psm1') -Force
+            $transcriptText=(@($transcriptData.transcription|ForEach-Object{try{Compress-TranscriptLoop ([string]$_.text)}catch [Text.RegularExpressions.RegexMatchTimeoutException]{[string]$_.text}}) -join "`n")
+        }
+    }
+    if($transcriptText.Length -gt 180000){$transcriptText=$transcriptText.Substring(0,180000)}
     $termSchema=@{type='object';additionalProperties=$false;required=@('term','observed_form','canonical_confidence','evidence','relevance','asr_risk','importance');properties=@{term=@{type='string'};observed_form=@{type='string'};canonical_confidence=@{type='integer';minimum=0;maximum=4};evidence=@{type='integer';minimum=0;maximum=4};relevance=@{type='integer';minimum=0;maximum=4};asr_risk=@{type='integer';minimum=0;maximum=4};importance=@{type='integer';minimum=0;maximum=4}}}
     $schema=@{type='json_schema';json_schema=@{name='course_glossary';strict=$true;schema=@{type='object';additionalProperties=$false;required=@('topic','terms');properties=@{topic=@{type='string'};terms=@{type='array';minItems=1;maxItems=80;items=$termSchema}}}}}
     $system=@"
@@ -73,7 +83,7 @@ Score each term from 0 to 4. evidence: support from this recording, including co
     $result=$null
     for($attempt=1;$attempt -le 3;$attempt++){
         Write-Host "Glossary API: attempt $attempt of 3." -ForegroundColor DarkCyan
-        try{$result=Invoke-RestMethod -Method Post -Uri $url -Headers @{Authorization="Bearer $key"} -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($request)) -TimeoutSec 600;if($result.choices[0].finish_reason -eq 'length'){throw 'Response truncated by output token limit.'};break}
+        try{$result=Invoke-TranscriptApi $url $key $request 600;[void](Get-TranscriptResponseText $result);break}
         catch{
             $failure=$_;$statusCode=$null;if($failure.Exception.Response -and $null -ne $failure.Exception.Response.StatusCode){$statusCode=[int]$failure.Exception.Response.StatusCode}
             Write-Warning "Glossary attempt $attempt failed: $($failure.Exception.Message)"
@@ -82,7 +92,7 @@ Score each term from 0 to 4. evidence: support from this recording, including co
             $delay=if($statusCode -eq 429){15*[math]::Pow(2,$attempt-1)}else{5*[math]::Pow(2,$attempt-1)};Start-Sleep -Seconds $delay
         }
     }
-    $content=([string]$result.choices[0].message.content -replace '(?s)^.*?```(?:json)?\s*','' -replace '(?s)\s*```.*$','').Trim();$object=$content|ConvertFrom-Json
+    $object=(Get-TranscriptResponseText $result)|ConvertFrom-Json
     $rankedTerms=@();$seenTerms=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal);$modelIndex=0
     foreach($modelTerm in @($object.terms)){
         $term=([string]$modelTerm.term).Trim()

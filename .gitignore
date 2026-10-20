@@ -15,6 +15,9 @@ tools/*.exe
 *.ogg
 *.m4a
 transcripts/
+.work/
+*.api-diagnostics/
+__pycache__/
 *.raw.json
 *.raw.srt
 *.raw.txt
