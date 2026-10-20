@@ -168,4 +168,3 @@ function Invoke-TranscriptLecture($Task) {
 }
 
 Export-ModuleMember -Function Invoke-TranscriptCorrection,Invoke-TranscriptLecture
-
